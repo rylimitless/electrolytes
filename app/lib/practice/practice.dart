@@ -1,3 +1,4 @@
+import 'package:app/mathgen/algebra/algebra_screen.dart';
 import 'package:app/mathgen/geometry/geometry.dart';
 import 'package:flutter/material.dart';
 
@@ -166,7 +167,14 @@ class PracticePage extends StatelessWidget {
                       _buildTopicCard(
                         title: 'Algebra Basics',
                         icon: _buildAlgebraIcon(),
-                        onTap: () {},
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => AlgebraScreen(),
+                            ),
+                          );
+                        },
                         index: 1,
                       ),
                       const SizedBox(height: 32),
