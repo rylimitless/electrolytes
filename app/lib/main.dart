@@ -56,8 +56,8 @@ class _MyHomePageState extends State<MyHomePage> {
 
   @override
   Widget build(BuildContext context) {
-    return FScaffold(
-      footer: BottomNavigationBar(
+    return Scaffold(
+      bottomNavigationBar: BottomNavigationBar(
         type: BottomNavigationBarType.fixed,
         currentIndex: index,
         onTap: (val) {
@@ -79,7 +79,7 @@ class _MyHomePageState extends State<MyHomePage> {
         ],
       ),
 
-      child: IndexedStack(
+      body: IndexedStack(
         index: index,
         children: [
           Center(
@@ -107,11 +107,14 @@ class _MyHomePageState extends State<MyHomePage> {
           ),
         ],
       ),
-      // floatingActionButton: FloatingActionButton(
-      //   onPressed: _incrementCounter,wh
-      //   tooltip: 'Increment',
-      //   child: const Icon(Icons.add),
-      // ), // This trailing comma makes auto-formatting nicer for build methods.
+
+      floatingActionButton: FloatingActionButton.extended(
+        label: const Text("Calculator"),
+        onPressed: _incrementCounter,
+        icon: Icon(FIcons.calculator),
+        // tooltip: 'Increment',
+        // child: const Icon(FIcons.calculator),
+      ), // This trailing comma makes auto-formatting nicer for build methods.
     );
   }
 }
