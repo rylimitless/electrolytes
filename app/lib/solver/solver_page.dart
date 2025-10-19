@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 class SolverPage extends StatefulWidget {
   const SolverPage({super.key});
@@ -55,67 +57,83 @@ class _SolverPageState extends State<SolverPage> {
       _isProcessing = true;
     });
 
-    // TODO: Replace this with your actual API call
-    await Future.delayed(const Duration(seconds: 2)); // Simulate API call
+    try {
+      // Upload image to backend and get processed results
+      final response = await _uploadImageToBackend();
 
-    // Mock response - replace with actual API response
-    setState(() {
-      _aiResponse = {
-        "extracted_text":
-            "1. (a) (i) Calculate the value of √(7.1)² + (2.9)² , giving your answer correct to a) 2 significant figures",
-        "question":
-            "Calculate the value of √(7.1)² + (2.9)², giving your answer correct to 2 significant figures.",
-        "answer_analysis": {
-          "total_steps": 5,
-          "steps": [
-            {
-              "step_number": 1,
-              "description": "Calculate the square of the first number (7.1).",
-              "step_calculation": "(7.1)² = 7.1 × 7.1 = 50.41",
-              "eli5_explanation":
-                  "First, we take the number 7.1 and multiply it by itself. It's like building a square where each side is 7.1 units long, and we're finding its area.",
-              "key_concept": "Squaring a number",
+      setState(() {
+        _aiResponse = response;
+        _isProcessing = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isProcessing = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error processing image: $e')),
+      );
+    }
+  }
+
+  Future<Map<String, dynamic>> _uploadImageToBackend() async {
+    if (_selectedImage == null) {
+      throw Exception('No image selected');
+    }
+
+    // Backend URL - update this to match your actual backend URL
+    const String backendUrl = 'http://52.3.253.79:8000';
+
+    try {
+      // Create multipart request
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$backendUrl/upload'),
+      );
+
+      // Add image file
+      var file = await http.MultipartFile.fromPath(
+        'file',
+        _selectedImage!.path,
+      );
+      request.files.add(file);
+
+      // Send request
+      var streamedResponse = await request.send();
+      var response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        var responseData = json.decode(response.body);
+
+        // Check if webhook processing was successful
+        if (responseData['webhook_status']['success'] == true) {
+          // Return the processed data structure from the backend
+          return {
+            "extracted_text": responseData['extracted_text'] ?? 'Image processed successfully',
+            "question": responseData['question'] ?? 'Math problem detected',
+            "answer_analysis": responseData['answer_analysis'] ?? {
+              "total_steps": 1,
+              "steps": [
+                {
+                  "step_number": 1,
+                  "description": "Image uploaded and sent for processing",
+                  "step_calculation": "Upload completed",
+                  "eli5_explanation": "Your image has been uploaded and is being processed by our AI system.",
+                  "key_concept": "Image Processing",
+                }
+              ],
             },
-            {
-              "step_number": 2,
-              "description": "Calculate the square of the second number (2.9).",
-              "step_calculation": "(2.9)² = 2.9 × 2.9 = 8.41",
-              "eli5_explanation":
-                  "Next, we do the same thing for the second number, 2.9. We multiply 2.9 by 2.9 to find its 'square'.",
-              "key_concept": "Squaring a number",
-            },
-            {
-              "step_number": 3,
-              "description": "Add the results from Step 1 and Step 2.",
-              "step_calculation": "50.41 + 8.41 = 58.82",
-              "eli5_explanation":
-                  "Now we have two 'square' numbers. The plus sign (+) tells us to put them together, so we add 50.41 and 8.41.",
-              "key_concept": "Addition",
-            },
-            {
-              "step_number": 4,
-              "description": "Calculate the square root of the sum.",
-              "step_calculation": "√58.82 ≈ 7.6694185...",
-              "eli5_explanation":
-                  "The big 'checkmark' symbol (√) means we need to find a number that, when multiplied by itself, gives us 58.82. It's like figuring out the side length of a square if you know its area is 58.82.",
-              "key_concept": "Square root",
-            },
-            {
-              "step_number": 5,
-              "description": "Round the final answer to 2 significant figures.",
-              "step_calculation":
-                  "7.6694185... rounded to 2 significant figures is 7.7",
-              "eli5_explanation":
-                  "We need to make our answer shorter, showing only the two most important numbers (significant figures). We look at the first two numbers (7 and 6). Because the third number (6) is 5 or more, we round up the second number (6) to 7. So, the answer becomes 7.7.",
-              "key_concept": "Rounding to significant figures",
-            },
-          ],
-        },
-        "summary":
-            "This problem requires calculating the squares of two numbers, adding them together, finding the square root of the sum, and finally rounding the result to two significant figures.",
-      };
-      _isProcessing = false;
-    });
+            "summary": responseData['summary'] ?? 'Image uploaded successfully and sent for AI processing.',
+          };
+        } else {
+          throw Exception('Webhook processing failed: ${responseData['webhook_status']['error']}');
+        }
+      } else {
+        throw Exception('Upload failed: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Network error: $e');
+    }
   }
 
   void _uploadAnotherImage() {
