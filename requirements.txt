@@ -2,3 +2,8 @@ fastapi[standard]
 python-multipart
 uvicorn[standard]
 python-dotenv
+motor
+pymongo
+bcrypt
+python-jose[cryptography]
+passlib[bcrypt]

@@ -1,6 +1,10 @@
-import 'package:app/practice/practice.dart';
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
+import 'package:provider/provider.dart';
+import 'services/auth_service.dart';
+import 'pages/login_page.dart';
+import 'pages/signup_page.dart';
+import 'pages/forgot_password_page.dart';
 
 void main() {
   runApp(const MyApp());
@@ -9,112 +13,170 @@ void main() {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      builder: (context, child) =>
-          FAnimatedTheme(data: FThemes.zinc.light, child: child!),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+    return ChangeNotifierProvider(
+      create: (context) => AuthService(),
+      child: MaterialApp(
+        title: 'Electrolytes App',
+        builder: (context, child) =>
+            FAnimatedTheme(data: FThemes.zinc.light, child: child!),
+        home: const AuthWrapper(),
+        routes: {
+          '/login': (context) => const LoginPage(),
+          '/signup': (context) => const SignupPage(),
+          '/forgot-password': (context) => const ForgotPasswordPage(),
+          '/home': (context) => const HomePage(),
+        },
+      ),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+// Authentication wrapper to handle login state
+class AuthWrapper extends StatelessWidget {
+  const AuthWrapper({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  Widget build(BuildContext context) {
+    final authService = Provider.of<AuthService>(context);
+
+    // For now, always show login page first
+    // In a real app, you might want to check for stored tokens
+    return const LoginPage();
+  }
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
-  int index = 0;
+// Home page for both authenticated and guest users
+class HomePage extends StatefulWidget {
+  const HomePage({super.key});
 
-  void _incrementCounter() {
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  int _selectedIndex = 0;
+
+  void _onItemTapped(int index) {
     setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+      _selectedIndex = index;
     });
+  }
+
+  void _logout() {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    authService.logout();
+    Navigator.of(context).pushReplacementNamed('/login');
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      bottomNavigationBar: BottomNavigationBar(
-        type: BottomNavigationBarType.fixed,
-        currentIndex: index,
-        onTap: (val) {
-          setState(() {
-            index = val;
-          });
-        },
-        items: [
-          BottomNavigationBarItem(label: "Home", icon: Icon(FIcons.house)),
-          BottomNavigationBarItem(label: "Practice", icon: Icon(FIcons.school)),
-          BottomNavigationBarItem(
-            label: "Online Play",
-            icon: Icon(FIcons.play),
-          ),
-          BottomNavigationBarItem(
-            label: "Solver",
-            icon: Icon(FIcons.calculator),
-          ),
+    final authService = Provider.of<AuthService>(context);
+
+    return FScaffold(
+      header: FHeader(
+        title: const Text('Electrolytes App'),
+        actions: [
+          if (authService.isAuthenticated)
+            FButton(
+              onPress: _logout,
+              style: FButtonStyle.ghost,
+              child: const Text('Logout'),
+            )
+          else
+            FButton(
+              onPress: () => Navigator.of(context).pushNamed('/login'),
+              style: FButtonStyle.ghost,
+              child: const Text('Login'),
+            ),
         ],
       ),
-
-      body: IndexedStack(
-        index: index,
-        children: [
-          Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  'Home Page',
-                  style: Theme.of(context).textTheme.headlineMedium,
+      content: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (authService.isAuthenticated && authService.username != null)
+              Text(
+                'Welcome back, ${authService.username}!',
+                style: Theme.of(context).textTheme.headlineSmall,
+              )
+            else
+              const Text(
+                'Welcome, Guest!',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+            const SizedBox(height: 20),
+            Expanded(
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      authService.isAuthenticated
+                          ? 'Authentication system is working!'
+                          : 'Welcome to Electrolytes App!',
+                      style: const TextStyle(fontSize: 18),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      authService.isAuthenticated
+                          ? 'You are successfully logged in.'
+                          : 'You can use the app as a guest or login for additional features.',
+                      style: const TextStyle(fontSize: 16, color: Colors.grey),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 32),
+                    if (authService.isAuthenticated) ...[
+                      FButton(
+                        onPress: () async {
+                          final result = await authService.getCurrentUser();
+                          if (result['success'] && mounted) {
+                            showDialog(
+                              context: context,
+                              builder: (context) => FAlertDialog(
+                                title: const Text('User Information'),
+                                body: Text('Username: ${result['user']['username']}\nEmail: ${result['user']['email'] ?? 'Not provided'}\nRole: ${result['user']['role']}\nStatus: ${result['user']['status']}'),
+                                actions: [
+                                  FButton(
+                                    style: FButtonStyle.primary,
+                                    onPress: () => Navigator.of(context).pop(),
+                                    child: const Text('Close'),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }
+                        },
+                        style: FButtonStyle.primary,
+                        child: const Text('Get User Info'),
+                      ),
+                    ] else ...[
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          FButton(
+                            onPress: () => Navigator.of(context).pushNamed('/login'),
+                            style: FButtonStyle.primary,
+                            child: const Text('Login'),
+                          ),
+                          const SizedBox(width: 16),
+                          FButton(
+                            onPress: () => Navigator.of(context).pushNamed('/signup'),
+                            style: FButtonStyle.outline,
+                            child: const Text('Sign Up'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
                 ),
-                Text('Counter: $_counter'),
-                ElevatedButton(
-                  onPressed: _incrementCounter,
-                  child: Text('Increment'),
-                ),
-              ],
+              ),
             ),
-          ),
-          PracticePage(),
-          Center(
-            child: Text(
-              'Play Page',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
-
-      floatingActionButton: FloatingActionButton.extended(
-        label: const Text("Calculator"),
-        onPressed: _incrementCounter,
-        icon: Icon(FIcons.calculator),
-        // tooltip: 'Increment',
-        // child: const Icon(FIcons.calculator),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
     );
   }
 }
