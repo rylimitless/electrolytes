@@ -1,4 +1,5 @@
 import 'package:app/practice/practice.dart';
+import 'package:app/home/home.dart';
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 
@@ -82,22 +83,7 @@ class _MyHomePageState extends State<MyHomePage> {
       body: IndexedStack(
         index: index,
         children: [
-          Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  'Home Page',
-                  style: Theme.of(context).textTheme.headlineMedium,
-                ),
-                Text('Counter: $_counter'),
-                ElevatedButton(
-                  onPressed: _incrementCounter,
-                  child: Text('Increment'),
-                ),
-              ],
-            ),
-          ),
+          HomePage(),
           PracticePage(),
           Center(
             child: Text(
