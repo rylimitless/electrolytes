@@ -2,6 +2,7 @@ import 'package:app/practice/practice.dart';
 import 'package:app/home/home.dart';
 import 'package:app/calculator/calc.dart';
 import 'package:app/solver/solver_page.dart';
+import 'package:app/chat/chat.dart';
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 
@@ -61,8 +62,8 @@ class _MyHomePageState extends State<MyHomePage> {
           BottomNavigationBarItem(label: "Home", icon: Icon(FIcons.house)),
           BottomNavigationBarItem(label: "Practice", icon: Icon(FIcons.school)),
           BottomNavigationBarItem(
-            label: "Online Play",
-            icon: Icon(FIcons.play),
+            label: "Chat",
+            icon: Icon(FIcons.messageCircle),
           ),
           BottomNavigationBarItem(
             label: "Solver",
@@ -76,12 +77,7 @@ class _MyHomePageState extends State<MyHomePage> {
         children: [
           HomePage(),
           PracticePage(),
-          Center(
-            child: Text(
-              'Play Page',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-          ),
+          ChatPage(),
           SolverPage(),
         ],
       ),
