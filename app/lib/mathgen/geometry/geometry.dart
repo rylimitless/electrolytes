@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:forui/forui.dart';
 import 'dart:math';
 
 class GeometryPage extends StatefulWidget {
@@ -30,6 +29,9 @@ class _GeometryPageState extends State<GeometryPage> {
       _generateAreaQuestion(),
       _generatePerimeterQuestion(),
       _generateCircleQuestion(),
+      _generateAlgebraicSquareQuestion(),
+      _generateAlgebraicRectangleQuestion(),
+      _generateAlgebraicTriangleQuestion(),
     ];
   }
 
@@ -162,6 +164,108 @@ class _GeometryPageState extends State<GeometryPage> {
       correctAnswer: correctAnswer,
       type: QuestionType.circle,
       visualData: {'radius': radius, 'area': roundedArea},
+    );
+  }
+
+  GeometryQuestion _generateAlgebraicSquareQuestion() {
+    // Generate x value (solution)
+    int x = random.nextInt(6) + 2; // 2-7
+
+    // Create two expressions that should be equal for a square
+    int a = random.nextInt(3) + 1; // coefficient for first side
+    int b = random.nextInt(5) + 1; // constant for first side
+
+    // Second side = first side when x is the solution
+    // First side: ax + b
+    // Second side: c*x + d where c*x + d = a*x + b when solved
+    int firstSide = a * x + b;
+
+    // Create second expression
+    int c = random.nextInt(3) + 1;
+    int d = firstSide - (c * x);
+
+    String correctAnswer = x.toString();
+    List<String> options = [
+      correctAnswer,
+      (x + 1).toString(),
+      (x - 1).toString(),
+      (x + 2).toString(),
+    ];
+    options.shuffle();
+
+    return GeometryQuestion(
+      question:
+          "In a square, one side is ${a}x + $b and another side is ${c}x + $d. Find x:",
+      options: options,
+      correctAnswer: correctAnswer,
+      type: QuestionType.algebraicSquare,
+      visualData: {'a': a, 'b': b, 'c': c, 'd': d, 'x': x},
+    );
+  }
+
+  GeometryQuestion _generateAlgebraicRectangleQuestion() {
+    // For rectangle: opposite sides are equal
+    int x = random.nextInt(5) + 3; // 3-7
+
+    int a = random.nextInt(3) + 2; // coefficient
+    int b = random.nextInt(6) + 1; // constant
+
+    // Length: ax + b
+    int length = a * x + b;
+
+    // Width: cx + d (should equal length's opposite side)
+    int c = random.nextInt(2) + 1;
+    int d = length - (c * x);
+
+    String correctAnswer = x.toString();
+    List<String> options = [
+      correctAnswer,
+      (x + 1).toString(),
+      (x - 1).toString(),
+      (x * 2).toString(),
+    ];
+    options.shuffle();
+
+    return GeometryQuestion(
+      question:
+          "In a rectangle, the length is ${a}x + $b and the width is ${c}x + $d. If opposite sides are equal, find x:",
+      options: options,
+      correctAnswer: correctAnswer,
+      type: QuestionType.algebraicRectangle,
+      visualData: {'a': a, 'b': b, 'c': c, 'd': d, 'x': x, 'length': length},
+    );
+  }
+
+  GeometryQuestion _generateAlgebraicTriangleQuestion() {
+    // For isosceles triangle: two sides are equal
+    int x = random.nextInt(6) + 2; // 2-7
+
+    int a = random.nextInt(3) + 1;
+    int b = random.nextInt(7) + 2;
+
+    // Side 1: ax + b
+    int side1 = a * x + b;
+
+    // Side 2: cx + d (equal to side 1 for isosceles)
+    int c = random.nextInt(2) + 2;
+    int d = side1 - (c * x);
+
+    String correctAnswer = x.toString();
+    List<String> options = [
+      correctAnswer,
+      (x + 1).toString(),
+      (x - 1).toString(),
+      (x + 2).toString(),
+    ];
+    options.shuffle();
+
+    return GeometryQuestion(
+      question:
+          "In an isosceles triangle, two equal sides are ${a}x + $b and ${c}x + $d. Find x:",
+      options: options,
+      correctAnswer: correctAnswer,
+      type: QuestionType.algebraicTriangle,
+      visualData: {'a': a, 'b': b, 'c': c, 'd': d, 'x': x},
     );
   }
 
@@ -456,7 +560,16 @@ class _GeometryPageState extends State<GeometryPage> {
   }
 }
 
-enum QuestionType { triangle, angle, area, perimeter, circle }
+enum QuestionType {
+  triangle,
+  angle,
+  area,
+  perimeter,
+  circle,
+  algebraicSquare,
+  algebraicRectangle,
+  algebraicTriangle,
+}
 
 class GeometryQuestion {
   final String question;
@@ -502,6 +615,15 @@ class QuestionVisualPainter extends CustomPainter {
         break;
       case QuestionType.circle:
         _drawCircle(canvas, size, paint, textPainter);
+        break;
+      case QuestionType.algebraicSquare:
+        _drawAlgebraicSquare(canvas, size, paint, textPainter);
+        break;
+      case QuestionType.algebraicRectangle:
+        _drawAlgebraicRectangle(canvas, size, paint, textPainter);
+        break;
+      case QuestionType.algebraicTriangle:
+        _drawAlgebraicTriangle(canvas, size, paint, textPainter);
         break;
     }
   }
@@ -721,6 +843,189 @@ class QuestionVisualPainter extends CustomPainter {
     );
     textPainter.layout();
     textPainter.paint(canvas, position);
+  }
+
+  void _drawAlgebraicSquare(
+    Canvas canvas,
+    Size size,
+    Paint paint,
+    TextPainter textPainter,
+  ) {
+    paint.color = Colors.indigo[600]!;
+
+    final center = Offset(size.width / 2, size.height / 2);
+    final squareSize = 100.0;
+
+    final rect = Rect.fromCenter(
+      center: center,
+      width: squareSize,
+      height: squareSize,
+    );
+    canvas.drawRect(rect, paint);
+
+    // Draw equal marks on opposite sides
+    final markPaint = Paint()
+      ..strokeWidth = 2
+      ..color = Colors.indigo[800]!;
+
+    // Top side mark
+    canvas.drawLine(
+      Offset(center.dx - 5, rect.top - 5),
+      Offset(center.dx + 5, rect.top - 5),
+      markPaint,
+    );
+
+    // Bottom side mark
+    canvas.drawLine(
+      Offset(center.dx - 5, rect.bottom + 5),
+      Offset(center.dx + 5, rect.bottom + 5),
+      markPaint,
+    );
+
+    // Labels with algebraic expressions
+    final a = question.visualData['a'];
+    final b = question.visualData['b'];
+    final c = question.visualData['c'];
+    final d = question.visualData['d'];
+
+    _drawText(
+      canvas,
+      '${a}x ${b >= 0 ? '+' : ''} $b',
+      Offset(center.dx - 30, rect.top - 25),
+      textPainter,
+    );
+    _drawText(
+      canvas,
+      '${c}x ${d >= 0 ? '+' : ''} $d',
+      Offset(center.dx - 30, rect.bottom + 15),
+      textPainter,
+    );
+  }
+
+  void _drawAlgebraicRectangle(
+    Canvas canvas,
+    Size size,
+    Paint paint,
+    TextPainter textPainter,
+  ) {
+    paint.color = Colors.teal[600]!;
+
+    final center = Offset(size.width / 2, size.height / 2);
+    final rectWidth = 130.0;
+    final rectHeight = 85.0;
+
+    final rect = Rect.fromCenter(
+      center: center,
+      width: rectWidth,
+      height: rectHeight,
+    );
+    canvas.drawRect(rect, paint);
+
+    // Draw equal marks on opposite sides
+    final markPaint = Paint()
+      ..strokeWidth = 2
+      ..color = Colors.teal[800]!;
+
+    // Top and bottom marks (length)
+    canvas.drawLine(
+      Offset(center.dx, rect.top - 5),
+      Offset(center.dx, rect.top - 10),
+      markPaint,
+    );
+    canvas.drawLine(
+      Offset(center.dx, rect.bottom + 5),
+      Offset(center.dx, rect.bottom + 10),
+      markPaint,
+    );
+
+    // Labels
+    final a = question.visualData['a'];
+    final b = question.visualData['b'];
+    final c = question.visualData['c'];
+    final d = question.visualData['d'];
+
+    _drawText(
+      canvas,
+      '${a}x ${b >= 0 ? '+' : ''} $b',
+      Offset(center.dx - 35, rect.top - 30),
+      textPainter,
+    );
+    _drawText(
+      canvas,
+      '${c}x ${d >= 0 ? '+' : ''} $d',
+      Offset(rect.left - 50, center.dy - 5),
+      textPainter,
+    );
+  }
+
+  void _drawAlgebraicTriangle(
+    Canvas canvas,
+    Size size,
+    Paint paint,
+    TextPainter textPainter,
+  ) {
+    paint.color = Colors.deepOrange[600]!;
+
+    final center = Offset(size.width / 2, size.height / 2);
+    final triangleSize = 100.0;
+
+    final p1 = Offset(center.dx, center.dy - triangleSize / 2);
+    final p2 = Offset(
+      center.dx - triangleSize / 2,
+      center.dy + triangleSize / 2,
+    );
+    final p3 = Offset(
+      center.dx + triangleSize / 2,
+      center.dy + triangleSize / 2,
+    );
+
+    final path = Path();
+    path.moveTo(p1.dx, p1.dy);
+    path.lineTo(p2.dx, p2.dy);
+    path.lineTo(p3.dx, p3.dy);
+    path.close();
+
+    canvas.drawPath(path, paint);
+
+    // Draw equal marks on two sides (isosceles)
+    final markPaint = Paint()
+      ..strokeWidth = 2
+      ..color = Colors.deepOrange[800]!;
+
+    // Mark on left side
+    final leftMid = Offset((p1.dx + p2.dx) / 2 - 3, (p1.dy + p2.dy) / 2);
+    canvas.drawLine(
+      Offset(leftMid.dx - 3, leftMid.dy - 3),
+      Offset(leftMid.dx + 3, leftMid.dy + 3),
+      markPaint,
+    );
+
+    // Mark on right side
+    final rightMid = Offset((p1.dx + p3.dx) / 2 + 3, (p1.dy + p3.dy) / 2);
+    canvas.drawLine(
+      Offset(rightMid.dx - 3, rightMid.dy - 3),
+      Offset(rightMid.dx + 3, rightMid.dy + 3),
+      markPaint,
+    );
+
+    // Labels
+    final a = question.visualData['a'];
+    final b = question.visualData['b'];
+    final c = question.visualData['c'];
+    final d = question.visualData['d'];
+
+    _drawText(
+      canvas,
+      '${a}x ${b >= 0 ? '+' : ''} $b',
+      Offset(p1.dx - 50, center.dy - 15),
+      textPainter,
+    );
+    _drawText(
+      canvas,
+      '${c}x ${d >= 0 ? '+' : ''} $d',
+      Offset(p1.dx + 20, center.dy - 15),
+      textPainter,
+    );
   }
 
   @override

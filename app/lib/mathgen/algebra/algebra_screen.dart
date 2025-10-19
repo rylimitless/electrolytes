@@ -319,6 +319,26 @@ class _AlgebraScreenState extends State<AlgebraScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Back Button
+                    Row(
+                      children: [
+                        IconButton(
+                          icon: Icon(Icons.arrow_back, color: Colors.blue[700]),
+                          onPressed: () => Navigator.of(context).pop(),
+                          tooltip: 'Back',
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Algebra Practice',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey[800],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
                     // Topic and Difficulty Selectors
                     Row(
                       children: [
