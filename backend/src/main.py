@@ -84,12 +84,13 @@ async def send_to_n8n_webhook(image_data: Dict[str, Any]) -> tuple[bool, Optiona
         logger.info(f"Webhook payload: {payload}")
 
         # Make async POST request to n8n webhook
+        # Use longer timeout for AI processing (120 seconds)
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 N8N_WEBHOOK_URL,
                 json=payload,
                 headers=headers,
-                timeout=30.0
+                timeout=120.0
             )
 
             logger.info(f"Webhook response status: {response.status_code}")
