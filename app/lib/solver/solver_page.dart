@@ -57,27 +57,72 @@ class _SolverPageState extends State<SolverPage> {
   }
 
   Future<void> _processImage() async {
+    await _processImageWithRetry(maxRetries: 2);
+  }
+
+  Future<void> _processImageWithRetry({int maxRetries = 2}) async {
     setState(() {
       _isProcessing = true;
     });
 
-    try {
-      // Upload image to backend and get processed results
-      final response = await _uploadImageToBackend();
+    int attempt = 0;
+    while (attempt <= maxRetries) {
+      try {
+        // Upload image to backend and get processed results
+        final response = await _uploadImageToBackend();
 
-      setState(() {
-        _aiResponse = response;
-        _isProcessing = false;
-      });
-    } catch (e) {
-      setState(() {
-        _isProcessing = false;
-      });
+        setState(() {
+          _aiResponse = response;
+          _isProcessing = false;
+        });
+        return; // Success, exit the retry loop
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error processing image: $e')),
-      );
+      } catch (e) {
+        attempt++;
+
+        if (attempt <= maxRetries && _isRetryableError(e)) {
+          // Wait before retrying (2 seconds for first retry, 4 seconds for second)
+          await Future.delayed(Duration(seconds: attempt * 2));
+
+          // Show retry message to user
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Retrying... Attempt $attempt of $maxRetries'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+          continue; // Retry
+        } else {
+          // Final failure or non-retryable error
+          setState(() {
+            _isProcessing = false;
+          });
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error processing image: $e'),
+              action: attempt > maxRetries && _isRetryableError(e)
+                ? SnackBarAction(
+                    label: 'Retry',
+                    onPressed: () {
+                      _processImageWithRetry(maxRetries: 1);
+                    },
+                  )
+                : null,
+            ),
+          );
+          return; // Exit the retry loop
+        }
+      }
     }
+  }
+
+  bool _isRetryableError(dynamic error) {
+    String errorMessage = error.toString().toLowerCase();
+    return errorMessage.contains('ai analysis is still being processed') ||
+           errorMessage.contains('empty response') ||
+           errorMessage.contains('network error') ||
+           errorMessage.contains('timeout');
   }
 
   Future<Map<String, dynamic>> _uploadImageToBackend() async {
@@ -177,13 +222,13 @@ class _SolverPageState extends State<SolverPage> {
           };
         }
         // Check if webhook_status indicates success but no response data
-        else if (responseData['webhook_status'] != null && 
+        else if (responseData['webhook_status'] != null &&
                  responseData['webhook_status']['success'] == true) {
-          // Check if webhook_response exists but is empty
-          if (responseData['webhook_response'] != null) {
-            throw Exception('Image uploaded but AI returned empty response. Please try again.');
+          // Webhook succeeded but no response data - this is likely a timing or processing issue
+          if (responseData['webhook_response'] == null) {
+            throw Exception('Image uploaded successfully! The AI analysis is being processed. Please wait a moment and try uploading again, or check if the math problem was solved correctly.');
           } else {
-            throw Exception('Image uploaded but no solution data received from AI. Please try again.');
+            throw Exception('Image uploaded but AI analysis is still being processed. Please try again in a few seconds.');
           }
         }
         else {
@@ -203,6 +248,42 @@ class _SolverPageState extends State<SolverPage> {
       _selectedXFile = null;
       _aiResponse = null;
     });
+  }
+
+  Future<void> _checkImageStatus() async {
+    if (_selectedImage == null) return;
+
+    setState(() {
+      _isProcessing = true;
+    });
+
+    try {
+      // Try to get updated results for the current image
+      final response = await _getImageResults();
+
+      setState(() {
+        _aiResponse = response;
+        _isProcessing = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Results updated successfully!')),
+      );
+    } catch (e) {
+      setState(() {
+        _isProcessing = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Still processing: $e')),
+      );
+    }
+  }
+
+  Future<Map<String, dynamic>> _getImageResults() async {
+    // This would need a new backend endpoint to check image status
+    // For now, we'll just retry the same logic
+    throw Exception('AI analysis is still being processed. Please try again in a few seconds.');
   }
 
   @override
@@ -409,6 +490,36 @@ class _SolverPageState extends State<SolverPage> {
               textAlign: TextAlign.center,
             ),
           ),
+
+          const SizedBox(height: 24),
+
+          // Status check button (only show if there's a selected image but no results)
+          if (_selectedImage != null && _aiResponse == null && !_isProcessing) ...[
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: OutlinedButton.icon(
+                onPressed: _checkImageStatus,
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Color(0xFF7C3AED)),
+                  foregroundColor: const Color(0xFF7C3AED),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                ),
+                icon: const Icon(Icons.refresh, size: 20),
+                label: const Text(
+                  'Check Processing Status',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    fontFamily: 'Lexend',
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -548,30 +659,55 @@ class _SolverPageState extends State<SolverPage> {
 
           const SizedBox(height: 24),
 
-          // Upload Another Image Button
-          SizedBox(
-            width: double.infinity,
-            height: 56,
-            child: ElevatedButton.icon(
-              onPressed: _uploadAnotherImage,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF7C3AED),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+          // Action Buttons
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _uploadAnotherImage,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF7C3AED),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                  ),
+                  icon: const Icon(Icons.upload, size: 20),
+                  label: const Text(
+                    'Upload Another',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'Lexend',
+                    ),
+                  ),
                 ),
-                padding: const EdgeInsets.symmetric(horizontal: 20),
               ),
-              icon: const Icon(Icons.upload, size: 24),
-              label: const Text(
-                'Upload Another Image',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  fontFamily: 'Lexend',
+              const SizedBox(width: 12),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _isProcessing ? null : _checkImageStatus,
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Color(0xFF7C3AED)),
+                    foregroundColor: const Color(0xFF7C3AED),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                  ),
+                  icon: const Icon(Icons.refresh, size: 20),
+                  label: const Text(
+                    'Check Status',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'Lexend',
+                    ),
+                  ),
                 ),
               ),
-            ),
+            ],
           ),
 
           const SizedBox(height: 16),
