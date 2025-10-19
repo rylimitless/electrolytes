@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:forui/forui.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart' show MediaType;
+import 'dart:convert';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class SolverPage extends StatefulWidget {
   const SolverPage({super.key});
@@ -11,7 +14,8 @@ class SolverPage extends StatefulWidget {
 }
 
 class _SolverPageState extends State<SolverPage> {
-  File? _selectedImage;
+  String? _selectedImage;
+  XFile? _selectedXFile;
   final ImagePicker _picker = ImagePicker();
   Map<String, dynamic>? _aiResponse;
   bool _isProcessing = false;
@@ -21,7 +25,8 @@ class _SolverPageState extends State<SolverPage> {
       final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
       if (image != null) {
         setState(() {
-          _selectedImage = File(image.path);
+          _selectedImage = image.path;
+          _selectedXFile = image;
           _aiResponse = null; // Clear previous results
         });
         await _processImage();
@@ -38,7 +43,8 @@ class _SolverPageState extends State<SolverPage> {
       final XFile? image = await _picker.pickImage(source: ImageSource.camera);
       if (image != null) {
         setState(() {
-          _selectedImage = File(image.path);
+          _selectedImage = image.path;
+          _selectedXFile = image;
           _aiResponse = null; // Clear previous results
         });
         await _processImage();
@@ -55,72 +61,146 @@ class _SolverPageState extends State<SolverPage> {
       _isProcessing = true;
     });
 
-    // TODO: Replace this with your actual API call
-    await Future.delayed(const Duration(seconds: 2)); // Simulate API call
+    try {
+      // Upload image to backend and get processed results
+      final response = await _uploadImageToBackend();
 
-    // Mock response - replace with actual API response
-    setState(() {
-      _aiResponse = {
-        "extracted_text":
-            "1. (a) (i) Calculate the value of √(7.1)² + (2.9)² , giving your answer correct to a) 2 significant figures",
-        "question":
-            "Calculate the value of √(7.1)² + (2.9)², giving your answer correct to 2 significant figures.",
-        "answer_analysis": {
-          "total_steps": 5,
-          "steps": [
-            {
-              "step_number": 1,
-              "description": "Calculate the square of the first number (7.1).",
-              "step_calculation": "(7.1)² = 7.1 × 7.1 = 50.41",
-              "eli5_explanation":
-                  "First, we take the number 7.1 and multiply it by itself. It's like building a square where each side is 7.1 units long, and we're finding its area.",
-              "key_concept": "Squaring a number",
+      setState(() {
+        _aiResponse = response;
+        _isProcessing = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isProcessing = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error processing image: $e')),
+      );
+    }
+  }
+
+  Future<Map<String, dynamic>> _uploadImageToBackend() async {
+    if (_selectedImage == null) {
+      throw Exception('No image selected');
+    }
+
+    // Backend URL - update this to match your actual backend URL
+    const String backendUrl = 'http://52.3.253.79:8000';
+
+    try {
+      // Create multipart request
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$backendUrl/upload'),
+      );
+
+      // Add image file - handle web vs mobile differently
+      http.MultipartFile file;
+      if (kIsWeb && _selectedImage!.startsWith('blob:')) {
+        // For web, we need to fetch the blob and convert it
+        final response = await http.get(Uri.parse(_selectedImage!));
+
+        // Use XFile's mime type for proper content type detection
+        String contentType = 'image/jpeg'; // Default fallback
+        String filename = 'image.jpg'; // Default fallback
+
+        if (_selectedXFile != null) {
+          contentType = _selectedXFile!.mimeType ?? 'image/jpeg';
+          filename = _selectedXFile!.name;
+
+          // Ensure filename has proper extension
+          if (!filename.contains('.')) {
+            filename = contentType.endsWith('png') ? 'image.png' : 'image.jpg';
+          }
+        } else {
+          // Fallback if XFile is not available
+          contentType = 'image/jpeg';
+          filename = 'image.jpg';
+        }
+
+        file = http.MultipartFile.fromBytes(
+          'file',
+          response.bodyBytes,
+          filename: filename,
+          contentType: MediaType.parse(contentType),
+        );
+      } else {
+        // For mobile/desktop, use the file path
+        file = await http.MultipartFile.fromPath(
+          'file',
+          File(_selectedImage!).path,
+        );
+      }
+      request.files.add(file);
+
+      // Send request
+      var streamedResponse = await request.send();
+      var response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        var responseData = json.decode(response.body);
+        
+        // Debug: Print the response structure
+        print('Backend response: ${response.body}');
+
+        // The backend returns an object with webhook_response field containing an array
+        // Check if we have the webhook_response field with array data
+        if (responseData['webhook_response'] != null && 
+            responseData['webhook_response'] is List &&
+            (responseData['webhook_response'] as List).isNotEmpty) {
+          var webhookData = responseData['webhook_response'][0];
+          
+          // Return the processed data structure from the webhook
+          return {
+            "extracted_text": webhookData['extracted_text'] ?? 'No text extracted',
+            "question": webhookData['question'] ?? 'Math problem detected',
+            "answer_analysis": webhookData['answer_analysis'] ?? {
+              "total_steps": 0,
+              "steps": [],
             },
-            {
-              "step_number": 2,
-              "description": "Calculate the square of the second number (2.9).",
-              "step_calculation": "(2.9)² = 2.9 × 2.9 = 8.41",
-              "eli5_explanation":
-                  "Next, we do the same thing for the second number, 2.9. We multiply 2.9 by 2.9 to find its 'square'.",
-              "key_concept": "Squaring a number",
+            "summary": webhookData['summary'] ?? 'Solution provided.',
+          };
+        }
+        // Fallback: check for direct response format (array at root level)
+        else if (responseData is List && responseData.isNotEmpty) {
+          var webhookData = responseData[0];
+          
+          return {
+            "extracted_text": webhookData['extracted_text'] ?? 'No text extracted',
+            "question": webhookData['question'] ?? 'Math problem detected',
+            "answer_analysis": webhookData['answer_analysis'] ?? {
+              "total_steps": 0,
+              "steps": [],
             },
-            {
-              "step_number": 3,
-              "description": "Add the results from Step 1 and Step 2.",
-              "step_calculation": "50.41 + 8.41 = 58.82",
-              "eli5_explanation":
-                  "Now we have two 'square' numbers. The plus sign (+) tells us to put them together, so we add 50.41 and 8.41.",
-              "key_concept": "Addition",
-            },
-            {
-              "step_number": 4,
-              "description": "Calculate the square root of the sum.",
-              "step_calculation": "√58.82 ≈ 7.6694185...",
-              "eli5_explanation":
-                  "The big 'checkmark' symbol (√) means we need to find a number that, when multiplied by itself, gives us 58.82. It's like figuring out the side length of a square if you know its area is 58.82.",
-              "key_concept": "Square root",
-            },
-            {
-              "step_number": 5,
-              "description": "Round the final answer to 2 significant figures.",
-              "step_calculation":
-                  "7.6694185... rounded to 2 significant figures is 7.7",
-              "eli5_explanation":
-                  "We need to make our answer shorter, showing only the two most important numbers (significant figures). We look at the first two numbers (7 and 6). Because the third number (6) is 5 or more, we round up the second number (6) to 7. So, the answer becomes 7.7.",
-              "key_concept": "Rounding to significant figures",
-            },
-          ],
-        },
-        "summary":
-            "This problem requires calculating the squares of two numbers, adding them together, finding the square root of the sum, and finally rounding the result to two significant figures.",
-      };
-      _isProcessing = false;
-    });
+            "summary": webhookData['summary'] ?? 'Solution provided.',
+          };
+        }
+        // Check if webhook_status indicates success but no response data
+        else if (responseData['webhook_status'] != null && 
+                 responseData['webhook_status']['success'] == true) {
+          // Check if webhook_response exists but is empty
+          if (responseData['webhook_response'] != null) {
+            throw Exception('Image uploaded but AI returned empty response. Please try again.');
+          } else {
+            throw Exception('Image uploaded but no solution data received from AI. Please try again.');
+          }
+        }
+        else {
+          throw Exception('Unexpected response format from server: ${response.body.substring(0, 100)}...');
+        }
+      } else {
+        throw Exception('Upload failed: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Network error: $e');
+    }
   }
 
   void _uploadAnotherImage() {
     setState(() {
       _selectedImage = null;
+      _selectedXFile = null;
       _aiResponse = null;
     });
   }
@@ -216,7 +296,9 @@ class _SolverPageState extends State<SolverPage> {
                     : _selectedImage != null
                     ? ClipRRect(
                       borderRadius: BorderRadius.circular(12),
-                      child: Image.file(_selectedImage!, fit: BoxFit.cover),
+                      child: _selectedImage!.startsWith('blob:')
+                        ? Image.network(_selectedImage!, fit: BoxFit.cover)
+                        : Image.asset(_selectedImage!, fit: BoxFit.cover),
                     )
                     : Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -334,8 +416,8 @@ class _SolverPageState extends State<SolverPage> {
 
   Widget _buildResultsView(ThemeData theme) {
     final steps = _aiResponse!['answer_analysis']['steps'] as List;
-    final question = _aiResponse!['question'] as String;
-    final summary = _aiResponse!['summary'] as String;
+    final question = _aiResponse!['extracted_text'] as String? ?? _aiResponse!['question'] as String? ?? 'Math problem detected';
+    final summary = _aiResponse!['summary'] as String? ?? 'Solution provided';
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -544,109 +626,112 @@ class _SolverPageState extends State<SolverPage> {
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: Text(
-                  step['key_concept'],
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    fontFamily: 'Lexend',
-                    color: const Color(0xFF7C3AED),
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      step['key_concept'] ?? 'Step ${step['step_number']}',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        fontFamily: 'Lexend',
+                        color: const Color(0xFF7C3AED),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      step['description'] ?? '',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontFamily: 'Lexend',
+                        color: theme.brightness == Brightness.light
+                            ? const Color(0xFF111418)
+                            : Colors.grey[200],
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
 
-          const SizedBox(height: 12),
-
-          // Description
-          Text(
-            step['description'],
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-              fontFamily: 'Lexend',
-              color:
-                  theme.brightness == Brightness.light
-                      ? const Color(0xFF111418)
-                      : Colors.grey[200],
-            ),
-          ),
-
-          const SizedBox(height: 8),
+          const SizedBox(height: 16),
 
           // Calculation
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color:
-                  theme.brightness == Brightness.light
-                      ? Colors.grey[100]
-                      : Colors.grey[800]?.withOpacity(0.3),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              step['step_calculation'],
-              style: TextStyle(
-                fontSize: 14,
-                fontFamily: 'Courier New',
-                fontWeight: FontWeight.w500,
+          if (step['step_calculation'] != null) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
                 color:
                     theme.brightness == Brightness.light
-                        ? const Color(0xFF111418)
-                        : Colors.grey[300],
+                        ? Colors.grey[100]
+                        : Colors.grey[800]?.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(8),
               ),
-            ),
-          ),
-
-          const SizedBox(height: 12),
-
-          // ELI5 Explanation
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color:
-                  theme.brightness == Brightness.light
-                      ? Colors.blue[50]
-                      : Colors.blue[900]?.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color:
-                    theme.brightness == Brightness.light
-                        ? Colors.blue[200]!
-                        : Colors.blue[700]!,
-                width: 1,
-              ),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(
-                  Icons.info_outline,
-                  size: 20,
+              child: Text(
+                step['step_calculation'],
+                style: TextStyle(
+                  fontSize: 14,
+                  fontFamily: 'Courier New',
+                  fontWeight: FontWeight.w500,
                   color:
                       theme.brightness == Brightness.light
-                          ? Colors.blue[700]
-                          : Colors.blue[300],
+                          ? const Color(0xFF111418)
+                          : Colors.grey[300],
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    step['eli5_explanation'],
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontFamily: 'Lexend',
-                      color:
-                          theme.brightness == Brightness.light
-                              ? Colors.blue[900]
-                              : Colors.blue[200],
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+
+          // ELI5 Explanation
+          if (step['eli5_explanation'] != null) ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color:
+                    theme.brightness == Brightness.light
+                        ? Colors.amber[50]
+                        : Colors.amber[900]?.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color:
+                      theme.brightness == Brightness.light
+                          ? Colors.amber[200]!
+                          : Colors.amber[700]!,
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.lightbulb_outline,
+                    size: 20,
+                    color:
+                        theme.brightness == Brightness.light
+                            ? Colors.amber[700]
+                            : Colors.amber[300],
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      step['eli5_explanation'],
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontFamily: 'Lexend',
+                        color:
+                            theme.brightness == Brightness.light
+                                ? Colors.amber[900]
+                                : Colors.amber[200],
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );

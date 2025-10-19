@@ -53,7 +53,7 @@ N8N_WEBHOOK_URL = os.getenv("N8N_OCR_WEBHOOK_URL", "http://n8n:5678/webhook/scan
 N8N_USERNAME = os.getenv("N8N_BASIC_AUTH_USER", "electrolytes_admin")
 N8N_PASSWORD = os.getenv("N8N_BASIC_AUTH_PASSWORD", "zBe&CCNaeU$MN2^Ws6uhkCLxw8xUS#ug")
 
-async def send_to_n8n_webhook(image_data: Dict[str, Any]) -> bool:
+async def send_to_n8n_webhook(image_data: Dict[str, Any]) -> tuple[bool, Optional[Any]]:
     """
     Send image upload data to n8n webhook for processing
 
@@ -61,7 +61,7 @@ async def send_to_n8n_webhook(image_data: Dict[str, Any]) -> bool:
         image_data: Dictionary containing image information
 
     Returns:
-        bool: True if webhook call was successful
+        tuple: (success: bool, response_data: Optional[Any])
     """
     try:
         # Create authentication header
@@ -84,12 +84,13 @@ async def send_to_n8n_webhook(image_data: Dict[str, Any]) -> bool:
         logger.info(f"Webhook payload: {payload}")
 
         # Make async POST request to n8n webhook
+        # Use longer timeout for AI processing (120 seconds)
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 N8N_WEBHOOK_URL,
                 json=payload,
                 headers=headers,
-                timeout=30.0
+                timeout=120.0
             )
 
             logger.info(f"Webhook response status: {response.status_code}")
@@ -98,22 +99,28 @@ async def send_to_n8n_webhook(image_data: Dict[str, Any]) -> bool:
             if response.status_code == 200:
                 logger.info(f"Successfully sent data to n8n webhook")
                 logger.info(f"Response body: {response.text}")
-                return True
+                # Parse and return the response data
+                try:
+                    response_data = response.json()
+                    return True, response_data
+                except Exception as json_error:
+                    logger.error(f"Failed to parse webhook response as JSON: {json_error}")
+                    return True, None
             else:
                 logger.error(f"Failed to send data to n8n webhook")
                 logger.error(f"Status code: {response.status_code}")
                 logger.error(f"Response body: {response.text}")
-                return False
+                return False, None
 
     except httpx.TimeoutException as e:
         logger.error(f"Timeout error sending data to n8n webhook: {e}")
-        return False
+        return False, None
     except httpx.ConnectError as e:
         logger.error(f"Connection error sending data to n8n webhook: {e}")
-        return False
+        return False, None
     except Exception as e:
         logger.error(f"Unexpected error sending data to n8n webhook: {e}")
-        return False
+        return False, None
 
 @app.get("/")
 async def root():
@@ -183,10 +190,13 @@ async def upload_image(
         # Send data to n8n webhook and wait for response
         webhook_success = False
         webhook_error = None
+        webhook_response_data = None
+
         try:
             logger.info(f"Sending data to n8n webhook for image: {filename}")
-            webhook_success = await send_to_n8n_webhook(response_data)
+            webhook_success, webhook_response_data = await send_to_n8n_webhook(response_data)
             logger.info(f"Webhook call {'succeeded' if webhook_success else 'failed'} for image: {filename}")
+
         except Exception as e:
             webhook_error = str(e)
             logger.error(f"Webhook call failed for image: {filename}: {e}")
@@ -198,6 +208,11 @@ async def upload_image(
             "error": webhook_error,
             "timestamp": datetime.now().isoformat()
         }
+
+        # Include webhook response data if available
+        if webhook_response_data:
+            response_data["webhook_response"] = webhook_response_data
+            logger.info(f"Added webhook response data to response: {webhook_response_data}")
 
         return response_data
 
