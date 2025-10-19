@@ -1,4 +1,5 @@
 import 'package:app/practice/practice.dart';
+import 'package:app/calculator/calc.dart';
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 
@@ -14,8 +15,9 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Flutter Demo',
-      builder: (context, child) =>
-          FAnimatedTheme(data: FThemes.zinc.light, child: child!),
+      builder:
+          (context, child) =>
+              FAnimatedTheme(data: FThemes.zinc.light, child: child!),
       home: const MyHomePage(title: 'Flutter Demo Home Page'),
     );
   }
@@ -110,11 +112,17 @@ class _MyHomePageState extends State<MyHomePage> {
 
       floatingActionButton: FloatingActionButton.extended(
         label: const Text("Calculator"),
-        onPressed: _incrementCounter,
+        onPressed: () {
+          // Show calculator as overlay
+          showDialog(
+            context: context,
+            barrierColor: Colors.black.withOpacity(0.3),
+            builder: (context) => const CalculatorScreen(),
+          );
+        },
         icon: Icon(FIcons.calculator),
-        // tooltip: 'Increment',
-        // child: const Icon(FIcons.calculator),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
+      ),
+      // This trailing comma makes auto-formatting nicer for build methods.
     );
   }
 }
