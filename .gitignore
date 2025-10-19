@@ -38,3 +38,9 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Flutter
+/flutter
+
+#Ignore vscode AI rules
+.github\instructions\codacy.instructions.md
