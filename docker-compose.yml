@@ -17,14 +17,18 @@ services:
       retries: 5
 
   mongodb:
-    image: mongodb/mongodb-community-server:latest
+    image: mongo:7.0
     container_name: mongodb
     restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:-mG9vK2qP7wR4zT9yL5hN8bM3}
+      MONGO_INITDB_DATABASE: n8n_chat_db
     ports:
       - "27017:27017"
-    env_file: .env
     volumes:
       - mongodb_data:/data/db
+      - ./mongo-init:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 10s
@@ -70,8 +74,17 @@ services:
       - "8000:8000"
     volumes:
       - ./backend/images:/app/images
+    env_file: .env
     environment:
       - TZ=UTC
+      - MONGODB_URL=${MONGODB_URL:-mongodb://n8n_chat_app:chatAppPass123@mongodb:27017/n8n_chat_db?authSource=admin}
+      - N8N_CHAT_WEBHOOK_URL=${N8N_CHAT_WEBHOOK_URL:-http://n8n:5678/webhook/chat}
+      - N8N_OCR_WEBHOOK_URL=${N8N_OCR_WEBHOOK_URL:-http://n8n:5678/webhook/scan-question}
+      - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER:-electrolytes_admin}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
+    depends_on:
+      mongodb:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s

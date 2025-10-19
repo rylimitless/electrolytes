@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: n8n-chat-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: n8n_user
+      MONGO_INITDB_ROOT_PASSWORD: n8n_password
+      MONGO_INITDB_DATABASE: n8n_chat_db
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - ./mongo-init:/docker-entrypoint-initdb.d
+    networks:
+      - n8n-chat-network
+
+  mongo-express:
+    image: mongo-express:1.0.0-alpha
+    container_name: n8n-chat-mongo-express
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: n8n_user
+      ME_CONFIG_MONGODB_ADMINPASSWORD: n8n_password
+      ME_CONFIG_MONGODB_URL: mongodb://n8n_user:n8n_password@mongodb:27017/
+      ME_CONFIG_BASICAUTH: false
+    depends_on:
+      - mongodb
+    networks:
+      - n8n-chat-network
+    profiles:
+      - tools
+
+volumes:
+  mongodb_data:
+    driver: local
+
+networks:
+  n8n-chat-network:
+    driver: bridge
