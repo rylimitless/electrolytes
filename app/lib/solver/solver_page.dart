@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:forui/forui.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart' show MediaType;
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class SolverPage extends StatefulWidget {
   const SolverPage({super.key});
@@ -13,7 +14,8 @@ class SolverPage extends StatefulWidget {
 }
 
 class _SolverPageState extends State<SolverPage> {
-  File? _selectedImage;
+  String? _selectedImage;
+  XFile? _selectedXFile;
   final ImagePicker _picker = ImagePicker();
   Map<String, dynamic>? _aiResponse;
   bool _isProcessing = false;
@@ -23,7 +25,8 @@ class _SolverPageState extends State<SolverPage> {
       final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
       if (image != null) {
         setState(() {
-          _selectedImage = File(image.path);
+          _selectedImage = image.path;
+          _selectedXFile = image;
           _aiResponse = null; // Clear previous results
         });
         await _processImage();
@@ -40,7 +43,8 @@ class _SolverPageState extends State<SolverPage> {
       final XFile? image = await _picker.pickImage(source: ImageSource.camera);
       if (image != null) {
         setState(() {
-          _selectedImage = File(image.path);
+          _selectedImage = image.path;
+          _selectedXFile = image;
           _aiResponse = null; // Clear previous results
         });
         await _processImage();
@@ -91,11 +95,43 @@ class _SolverPageState extends State<SolverPage> {
         Uri.parse('$backendUrl/upload'),
       );
 
-      // Add image file
-      var file = await http.MultipartFile.fromPath(
-        'file',
-        _selectedImage!.path,
-      );
+      // Add image file - handle web vs mobile differently
+      http.MultipartFile file;
+      if (kIsWeb && _selectedImage!.startsWith('blob:')) {
+        // For web, we need to fetch the blob and convert it
+        final response = await http.get(Uri.parse(_selectedImage!));
+
+        // Use XFile's mime type for proper content type detection
+        String contentType = 'image/jpeg'; // Default fallback
+        String filename = 'image.jpg'; // Default fallback
+
+        if (_selectedXFile != null) {
+          contentType = _selectedXFile!.mimeType ?? 'image/jpeg';
+          filename = _selectedXFile!.name;
+
+          // Ensure filename has proper extension
+          if (!filename.contains('.')) {
+            filename = contentType.endsWith('png') ? 'image.png' : 'image.jpg';
+          }
+        } else {
+          // Fallback if XFile is not available
+          contentType = 'image/jpeg';
+          filename = 'image.jpg';
+        }
+
+        file = http.MultipartFile.fromBytes(
+          'file',
+          response.bodyBytes,
+          filename: filename,
+          contentType: MediaType.parse(contentType),
+        );
+      } else {
+        // For mobile/desktop, use the file path
+        file = await http.MultipartFile.fromPath(
+          'file',
+          File(_selectedImage!).path,
+        );
+      }
       request.files.add(file);
 
       // Send request
@@ -139,6 +175,7 @@ class _SolverPageState extends State<SolverPage> {
   void _uploadAnotherImage() {
     setState(() {
       _selectedImage = null;
+      _selectedXFile = null;
       _aiResponse = null;
     });
   }
@@ -234,7 +271,9 @@ class _SolverPageState extends State<SolverPage> {
                     : _selectedImage != null
                     ? ClipRRect(
                       borderRadius: BorderRadius.circular(12),
-                      child: Image.file(_selectedImage!, fit: BoxFit.cover),
+                      child: _selectedImage!.startsWith('blob:')
+                        ? Image.network(_selectedImage!, fit: BoxFit.cover)
+                        : Image.asset(_selectedImage!, fit: BoxFit.cover),
                     )
                     : Column(
                       mainAxisAlignment: MainAxisAlignment.center,
