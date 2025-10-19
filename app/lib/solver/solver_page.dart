@@ -140,29 +140,54 @@ class _SolverPageState extends State<SolverPage> {
 
       if (response.statusCode == 200) {
         var responseData = json.decode(response.body);
+        
+        // Debug: Print the response structure
+        print('Backend response: ${response.body}');
 
-        // Check if webhook processing was successful
-        if (responseData['webhook_status']['success'] == true) {
-          // Return the processed data structure from the backend
+        // The backend returns an object with webhook_response field containing an array
+        // Check if we have the webhook_response field with array data
+        if (responseData['webhook_response'] != null && 
+            responseData['webhook_response'] is List &&
+            (responseData['webhook_response'] as List).isNotEmpty) {
+          var webhookData = responseData['webhook_response'][0];
+          
+          // Return the processed data structure from the webhook
           return {
-            "extracted_text": responseData['extracted_text'] ?? 'Image processed successfully',
-            "question": responseData['question'] ?? 'Math problem detected',
-            "answer_analysis": responseData['answer_analysis'] ?? {
-              "total_steps": 1,
-              "steps": [
-                {
-                  "step_number": 1,
-                  "description": "Image uploaded and sent for processing",
-                  "step_calculation": "Upload completed",
-                  "eli5_explanation": "Your image has been uploaded and is being processed by our AI system.",
-                  "key_concept": "Image Processing",
-                }
-              ],
+            "extracted_text": webhookData['extracted_text'] ?? 'No text extracted',
+            "question": webhookData['question'] ?? 'Math problem detected',
+            "answer_analysis": webhookData['answer_analysis'] ?? {
+              "total_steps": 0,
+              "steps": [],
             },
-            "summary": responseData['summary'] ?? 'Image uploaded successfully and sent for AI processing.',
+            "summary": webhookData['summary'] ?? 'Solution provided.',
           };
-        } else {
-          throw Exception('Webhook processing failed: ${responseData['webhook_status']['error']}');
+        }
+        // Fallback: check for direct response format (array at root level)
+        else if (responseData is List && responseData.isNotEmpty) {
+          var webhookData = responseData[0];
+          
+          return {
+            "extracted_text": webhookData['extracted_text'] ?? 'No text extracted',
+            "question": webhookData['question'] ?? 'Math problem detected',
+            "answer_analysis": webhookData['answer_analysis'] ?? {
+              "total_steps": 0,
+              "steps": [],
+            },
+            "summary": webhookData['summary'] ?? 'Solution provided.',
+          };
+        }
+        // Check if webhook_status indicates success but no response data
+        else if (responseData['webhook_status'] != null && 
+                 responseData['webhook_status']['success'] == true) {
+          // Check if webhook_response exists but is empty
+          if (responseData['webhook_response'] != null) {
+            throw Exception('Image uploaded but AI returned empty response. Please try again.');
+          } else {
+            throw Exception('Image uploaded but no solution data received from AI. Please try again.');
+          }
+        }
+        else {
+          throw Exception('Unexpected response format from server: ${response.body.substring(0, 100)}...');
         }
       } else {
         throw Exception('Upload failed: ${response.statusCode}');
@@ -391,8 +416,8 @@ class _SolverPageState extends State<SolverPage> {
 
   Widget _buildResultsView(ThemeData theme) {
     final steps = _aiResponse!['answer_analysis']['steps'] as List;
-    final question = _aiResponse!['question'] as String;
-    final summary = _aiResponse!['summary'] as String;
+    final question = _aiResponse!['extracted_text'] as String? ?? _aiResponse!['question'] as String? ?? 'Math problem detected';
+    final summary = _aiResponse!['summary'] as String? ?? 'Solution provided';
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -601,109 +626,112 @@ class _SolverPageState extends State<SolverPage> {
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: Text(
-                  step['key_concept'],
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    fontFamily: 'Lexend',
-                    color: const Color(0xFF7C3AED),
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      step['key_concept'] ?? 'Step ${step['step_number']}',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        fontFamily: 'Lexend',
+                        color: const Color(0xFF7C3AED),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      step['description'] ?? '',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontFamily: 'Lexend',
+                        color: theme.brightness == Brightness.light
+                            ? const Color(0xFF111418)
+                            : Colors.grey[200],
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
 
-          const SizedBox(height: 12),
-
-          // Description
-          Text(
-            step['description'],
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-              fontFamily: 'Lexend',
-              color:
-                  theme.brightness == Brightness.light
-                      ? const Color(0xFF111418)
-                      : Colors.grey[200],
-            ),
-          ),
-
-          const SizedBox(height: 8),
+          const SizedBox(height: 16),
 
           // Calculation
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color:
-                  theme.brightness == Brightness.light
-                      ? Colors.grey[100]
-                      : Colors.grey[800]?.withOpacity(0.3),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              step['step_calculation'],
-              style: TextStyle(
-                fontSize: 14,
-                fontFamily: 'Courier New',
-                fontWeight: FontWeight.w500,
+          if (step['step_calculation'] != null) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
                 color:
                     theme.brightness == Brightness.light
-                        ? const Color(0xFF111418)
-                        : Colors.grey[300],
+                        ? Colors.grey[100]
+                        : Colors.grey[800]?.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(8),
               ),
-            ),
-          ),
-
-          const SizedBox(height: 12),
-
-          // ELI5 Explanation
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color:
-                  theme.brightness == Brightness.light
-                      ? Colors.blue[50]
-                      : Colors.blue[900]?.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color:
-                    theme.brightness == Brightness.light
-                        ? Colors.blue[200]!
-                        : Colors.blue[700]!,
-                width: 1,
-              ),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(
-                  Icons.info_outline,
-                  size: 20,
+              child: Text(
+                step['step_calculation'],
+                style: TextStyle(
+                  fontSize: 14,
+                  fontFamily: 'Courier New',
+                  fontWeight: FontWeight.w500,
                   color:
                       theme.brightness == Brightness.light
-                          ? Colors.blue[700]
-                          : Colors.blue[300],
+                          ? const Color(0xFF111418)
+                          : Colors.grey[300],
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    step['eli5_explanation'],
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontFamily: 'Lexend',
-                      color:
-                          theme.brightness == Brightness.light
-                              ? Colors.blue[900]
-                              : Colors.blue[200],
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+
+          // ELI5 Explanation
+          if (step['eli5_explanation'] != null) ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color:
+                    theme.brightness == Brightness.light
+                        ? Colors.amber[50]
+                        : Colors.amber[900]?.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color:
+                      theme.brightness == Brightness.light
+                          ? Colors.amber[200]!
+                          : Colors.amber[700]!,
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.lightbulb_outline,
+                    size: 20,
+                    color:
+                        theme.brightness == Brightness.light
+                            ? Colors.amber[700]
+                            : Colors.amber[300],
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      step['eli5_explanation'],
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontFamily: 'Lexend',
+                        color:
+                            theme.brightness == Brightness.light
+                                ? Colors.amber[900]
+                                : Colors.amber[200],
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
