@@ -149,12 +149,14 @@ class BinOp extends Expr {
 
   @override
   String toDisplayString() {
-    final leftStr = (left is BinOp && _needsParens(left as BinOp, true))
-        ? '(${left.toDisplayString()})'
-        : left.toDisplayString();
-    final rightStr = (right is BinOp && _needsParens(right as BinOp, false))
-        ? '(${right.toDisplayString()})'
-        : right.toDisplayString();
+    final leftStr =
+        (left is BinOp && _needsParens(left as BinOp, true))
+            ? '(${left.toDisplayString()})'
+            : left.toDisplayString();
+    final rightStr =
+        (right is BinOp && _needsParens(right as BinOp, false))
+            ? '(${right.toDisplayString()})'
+            : right.toDisplayString();
     return '$leftStr $op $rightStr';
   }
 
