@@ -1,6 +1,7 @@
 import 'package:app/practice/practice.dart';
 import 'package:app/home/home.dart';
 import 'package:app/calculator/calc.dart';
+import 'package:app/solver/solver_page.dart';
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 
@@ -81,6 +82,7 @@ class _MyHomePageState extends State<MyHomePage> {
               style: Theme.of(context).textTheme.headlineMedium,
             ),
           ),
+          SolverPage(),
         ],
       ),
 
