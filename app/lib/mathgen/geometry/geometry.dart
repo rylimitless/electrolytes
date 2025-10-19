@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:math';
+import 'package:app/services/stats_service.dart';
 
 class GeometryPage extends StatefulWidget {
   @override
@@ -273,9 +274,17 @@ class _GeometryPageState extends State<GeometryPage> {
     setState(() {
       selectedAnswer = answer;
       showResult = true;
-      if (answer == questions[currentQuestionIndex].correctAnswer) {
+      final isCorrect = answer == questions[currentQuestionIndex].correctAnswer;
+      if (isCorrect) {
         correctAnswers++;
       }
+      // For now, mark Geometry difficulty as 'medium' by default.
+      // You can later wire a UI selector similar to Algebra.
+      StatsService.instance.incrementAttempt(
+        'Geometry',
+        'medium',
+        correct: isCorrect,
+      );
     });
   }
 

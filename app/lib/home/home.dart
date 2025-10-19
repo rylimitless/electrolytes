@@ -1,5 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:forui/forui.dart';
+import 'package:app/services/stats_service.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -14,25 +15,9 @@ class _HomePageState extends State<HomePage>
   final String userName = 'User';
 
   late TabController _tabController;
+  StreamSubscription<Map<String, Map<String, Map<String, int>>>>? _statsSub;
 
-  // Mock data structure for questions stats
-  final Map<String, Map<String, Map<String, int>>> _statsData = {
-    'Algebra': {
-      'Easy': {'attempted': 45, 'correct': 42},
-      'Medium': {'attempted': 30, 'correct': 24},
-      'Hard': {'attempted': 15, 'correct': 9},
-    },
-    'Geometry': {
-      'Easy': {'attempted': 38, 'correct': 35},
-      'Medium': {'attempted': 22, 'correct': 18},
-      'Hard': {'attempted': 10, 'correct': 5},
-    },
-    'Graphs': {
-      'Easy': {'attempted': 50, 'correct': 48},
-      'Medium': {'attempted': 35, 'correct': 30},
-      'Hard': {'attempted': 20, 'correct': 14},
-    },
-  };
+  Map<String, Map<String, Map<String, int>>> _statsData = {};
 
   // Category colors
   final Map<String, Color> _categoryColors = {
@@ -45,10 +30,23 @@ class _HomePageState extends State<HomePage>
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _tabController.addListener(() {
+      // Rebuild to update indicator color when swiping between tabs
+      if (mounted) setState(() {});
+    });
+    _loadStats();
+    // Also listen for updates
+    _statsSub = StatsService.instance.watchStats().listen((data) {
+      if (!mounted) return;
+      setState(() {
+        _statsData = data;
+      });
+    });
   }
 
   @override
   void dispose() {
+    _statsSub?.cancel();
     _tabController.dispose();
     super.dispose();
   }
@@ -103,14 +101,16 @@ class _HomePageState extends State<HomePage>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Optional logo placeholder; removed invalid call
                       Text(
                         '${_getGreeting()}, $userName! 👋',
                         style: TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.bold,
                           fontFamily: 'Lexend',
-                          color:
-                              isDark ? Colors.white : const Color(0xFF111418),
+                          color: isDark
+                              ? Colors.white
+                              : const Color(0xFF111418),
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -170,10 +170,12 @@ class _HomePageState extends State<HomePage>
                           ),
                           insets: const EdgeInsets.symmetric(horizontal: 16.0),
                         ),
-                        labelColor:
-                            isDark ? Colors.white : const Color(0xFF111418),
-                        unselectedLabelColor:
-                            isDark ? Colors.grey[400] : Colors.grey[600],
+                        labelColor: isDark
+                            ? Colors.white
+                            : const Color(0xFF111418),
+                        unselectedLabelColor: isDark
+                            ? Colors.grey[400]
+                            : Colors.grey[600],
                         labelStyle: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -228,7 +230,13 @@ class _HomePageState extends State<HomePage>
 
   Widget _buildCategoryContent(ThemeData theme, String category) {
     final isDark = theme.brightness == Brightness.dark;
-    final categoryData = _statsData[category]!;
+    final categoryData =
+        _statsData[category] ??
+        {
+          'Easy': {'attempted': 0, 'correct': 0},
+          'Medium': {'attempted': 0, 'correct': 0},
+          'Hard': {'attempted': 0, 'correct': 0},
+        };
     final categoryColor = _categoryColors[category]!;
 
     return SingleChildScrollView(
@@ -272,6 +280,14 @@ class _HomePageState extends State<HomePage>
         ],
       ),
     );
+  }
+
+  Future<void> _loadStats() async {
+    final data = await StatsService.instance.loadStats();
+    if (!mounted) return;
+    setState(() {
+      _statsData = data;
+    });
   }
 
   Widget _buildDifficultyCard(
@@ -511,8 +527,9 @@ class _HomePageState extends State<HomePage>
                         fontSize: 14,
                         fontWeight: FontWeight.w400,
                         fontFamily: 'Lexend',
-                        color:
-                            isDark ? Colors.grey[400] : const Color(0xFF60758A),
+                        color: isDark
+                            ? Colors.grey[400]
+                            : const Color(0xFF60758A),
                       ),
                     ),
                   ],
@@ -527,10 +544,9 @@ class _HomePageState extends State<HomePage>
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color:
-                  isDark
-                      ? const Color(0xFF7C3AED).withOpacity(0.1)
-                      : const Color(0xFFF8FAFC),
+              color: isDark
+                  ? const Color(0xFF7C3AED).withOpacity(0.1)
+                  : const Color(0xFFF8FAFC),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Column(

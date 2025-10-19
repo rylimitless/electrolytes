@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'algebra.dart';
+import 'package:app/services/stats_service.dart';
 
 class AlgebraScreen extends StatefulWidget {
   const AlgebraScreen({Key? key}) : super(key: key);
@@ -56,7 +57,7 @@ class _AlgebraScreenState extends State<AlgebraScreen> {
     });
   }
 
-  void _checkAnswer() {
+  Future<void> _checkAnswer() async {
     if (_answerController.text.isEmpty) return;
 
     final currentQuestion = _questions[_currentQuestionIndex];
@@ -87,6 +88,15 @@ class _AlgebraScreenState extends State<AlgebraScreen> {
             _isCorrect = null;
           });
       }
+      // After the specific checker sets _isCorrect, log the attempt
+      final diff = _selectedDifficulty; // values: easy|medium|hard
+      final mappedDiff = diff.isEmpty ? 'easy' : diff;
+      // Normalize to title-case in service
+      await StatsService.instance.incrementAttempt(
+        'Algebra',
+        mappedDiff,
+        correct: _isCorrect,
+      );
     } catch (e) {
       setState(() {
         _showAnswer = true;

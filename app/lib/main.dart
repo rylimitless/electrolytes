@@ -16,10 +16,10 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      debugShowCheckedModeBanner: false,
       title: 'Flutter Demo',
-      builder:
-          (context, child) =>
-              FAnimatedTheme(data: FThemes.zinc.light, child: child!),
+      builder: (context, child) =>
+          FAnimatedTheme(data: FThemes.zinc.light, child: child!),
       home: const MyHomePage(title: 'Flutter Demo Home Page'),
     );
   }
